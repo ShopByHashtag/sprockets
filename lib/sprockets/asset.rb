@@ -32,13 +32,18 @@ module Sprockets
 		attr_reader :content_type, :mtime, :length, :digest
 
 		def initialize(environment, logical_path, pathname)
-			@root         = environment.root
-			@logical_path = logical_path.to_s
-			@pathname     = Pathname.new(pathname)
-			@content_type = environment.content_type_of(pathname)
-			@mtime        = environment.stat(pathname).mtime
-			@length       = environment.stat(pathname).size
-			@digest       = environment.file_digest(pathname).hexdigest
+			begin
+				@root         = environment.root
+				@logical_path = logical_path.to_s
+				@pathname     = Pathname.new(pathname)
+				@content_type = environment.content_type_of(pathname)
+				@mtime        = environment.stat(pathname).mtime
+				@length       = environment.stat(pathname).size
+				@digest       = environment.file_digest(pathname).hexdigest
+			rescue => e
+				environment.logger.info "Couldn't initialize: #{logical_path}!"
+				Airbrake.notify(e)
+			end
 		end
 
 		# Initialize `Asset` from serialized `Hash`.
@@ -76,6 +81,7 @@ module Sprockets
 				coder['length']       = length
 				coder['digest']       = digest
 			rescue => e
+				environment.logger.info "Couldn't encode: #{logical_path}!"
 				Airbrake.notify(e)
 			end
 		end
