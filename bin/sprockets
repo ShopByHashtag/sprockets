@@ -3,6 +3,7 @@
 require 'sprockets'
 require 'optparse'
 require 'shellwords'
+require 'airbrake'
 
 unless ARGV.delete("--noenv")
   if File.exist?(path = "./.sprocketsrc")
