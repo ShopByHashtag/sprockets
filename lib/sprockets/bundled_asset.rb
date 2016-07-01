@@ -5,75 +5,85 @@ require 'set'
 require 'zlib'
 
 module Sprockets
-  # `BundledAsset`s are used for files that need to be processed and
-  # concatenated with other assets. Use for `.js` and `.css` files.
-  class BundledAsset < Asset
-    attr_reader :source
+	# `BundledAsset`s are used for files that need to be processed and
+	# concatenated with other assets. Use for `.js` and `.css` files.
+	class BundledAsset < Asset
+		attr_reader :source
 
-    def initialize(environment, logical_path, pathname)
-      super(environment, logical_path, pathname)
+		def initialize(environment, logical_path, pathname)
+			super(environment, logical_path, pathname)
 
-      @processed_asset = environment.find_asset(pathname, :bundle => false)
-      @required_assets = @processed_asset.required_assets
+			begin
+				@processed_asset = environment.find_asset(pathname, :bundle => false)
+				@required_assets = @processed_asset.required_assets
 
-      @source = ""
+				@source = ''
 
-      # Explode Asset into parts and gather the dependency bodies
-      to_a.each { |dependency| @source << dependency.to_s }
+				# Explode Asset into parts and gather the dependency bodies
+				to_a.each { |dependency| @source << dependency.to_s }
 
-      # Run bundle processors on concatenated source
-      context = environment.context_class.new(environment, logical_path, pathname)
-      @source = context.evaluate(pathname, :data => @source,
-                  :processors => environment.bundle_processors(content_type))
+				# Run bundle processors on concatenated source
+				context = environment.context_class.new(environment, logical_path, pathname)
+				@source = context.evaluate(pathname, :data => @source,
+				                           :processors     => environment.bundle_processors(content_type))
 
-      @mtime  = to_a.map(&:mtime).max
-      @length = Rack::Utils.bytesize(source)
-      @digest = environment.digest.update(source).hexdigest
-    end
+				@mtime  = to_a.map(&:mtime).max
+				@length = Rack::Utils.bytesize(source)
+				@digest = environment.digest.update(source).hexdigest
+			rescue => e
+				environment.logger.info "Couldn't initialize bundled asset: #{logical_path}!"
+				Airbrake.notify(e)
+			end
+		end
 
-    # Initialize `BundledAsset` from serialized `Hash`.
-    def init_with(environment, coder)
-      super
+		# Initialize `BundledAsset` from serialized `Hash`.
+		def init_with(environment, coder)
+			super
 
-      @processed_asset = environment.find_asset(pathname, :bundle => false)
-      @required_assets = @processed_asset.required_assets
+			begin
+				@processed_asset = environment.find_asset(pathname, :bundle => false)
+				@required_assets = @processed_asset.required_assets
 
-      if @processed_asset.dependency_digest != coder['required_assets_digest']
-        raise UnserializeError, "processed asset belongs to a stale environment"
-      end
+				if @processed_asset.dependency_digest != coder['required_assets_digest']
+					raise UnserializeError, 'processed asset belongs to a stale environment'
+				end
+			rescue => e
+				environment.logger.info "Couldn't initialize with bundled asset: #{logical_path}!"
+				Airbrake.notify(e)
+			end
 
-      @source = coder['source']
-    end
+			@source = coder['source']
+		end
 
-    # Serialize custom attributes in `BundledAsset`.
-    def encode_with(coder)
-      super
+		# Serialize custom attributes in `BundledAsset`.
+		def encode_with(coder)
+			super
 
-      coder['source'] = source
-      coder['required_assets_digest'] = @processed_asset.dependency_digest
-    end
+			coder['source']                 = source
+			coder['required_assets_digest'] = @processed_asset.dependency_digest
+		end
 
-    # Get asset's own processed contents. Excludes any of its required
-    # dependencies but does run any processors or engines on the
-    # original file.
-    def body
-      @processed_asset.source
-    end
+		# Get asset's own processed contents. Excludes any of its required
+		# dependencies but does run any processors or engines on the
+		# original file.
+		def body
+			@processed_asset.source
+		end
 
-    # Return an `Array` of `Asset` files that are declared dependencies.
-    def dependencies
-      to_a.reject { |a| a.eql?(@processed_asset) }
-    end
+		# Return an `Array` of `Asset` files that are declared dependencies.
+		def dependencies
+			to_a.reject { |a| a.eql?(@processed_asset) }
+		end
 
-    # Expand asset into an `Array` of parts.
-    def to_a
-      required_assets
-    end
+		# Expand asset into an `Array` of parts.
+		def to_a
+			required_assets
+		end
 
-    # Checks if Asset is stale by comparing the actual mtime and
-    # digest to the inmemory model.
-    def fresh?(environment)
-      @processed_asset.fresh?(environment)
-    end
-  end
+		# Checks if Asset is stale by comparing the actual mtime and
+		# digest to the inmemory model.
+		def fresh?(environment)
+			@processed_asset.fresh?(environment)
+		end
+	end
 end

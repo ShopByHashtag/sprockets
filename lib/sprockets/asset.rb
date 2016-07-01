@@ -81,7 +81,6 @@ module Sprockets
 				coder['length']       = length
 				coder['digest']       = digest
 			rescue => e
-				environment.logger.info "Couldn't encode: #{logical_path}!"
 				Airbrake.notify(e)
 			end
 		end
